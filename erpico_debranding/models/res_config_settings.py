@@ -18,6 +18,11 @@ class ResConfigSettings(models.TransientModel):
                 continue
             tree = etree.fromstring(arch)
             for node in tree.xpath(".//field[@widget='upgrade_boolean']"):
+                settings = node.xpath('ancestor::setting[1]')
+                if settings:
+                    settings[0].set('invisible', 'True')
+                else:
+                    node.set('invisible', 'True')
                 node.attrib.pop('widget', None)
             res['arch'] = etree.tostring(tree, encoding='unicode')
         return result

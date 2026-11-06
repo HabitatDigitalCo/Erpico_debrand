@@ -32,19 +32,15 @@ Funcionalidad: Ocultar módulos de pago del listado de apps
   Quiero no ver los módulos de Odoo Enterprise en el buscador
   Para no promocionar compras de módulos
 
-  Escenario: filtro por defecto
+  Escenario: filtro de la acción de catálogo
     Dado el módulo M con to_buy=True
     Cuando busco M en el buscador de apps
     Entonces M no aparece
-    Y el contador de apps no incluye M
-
-  Escenario: escape de auditoría
-    Dado el contexto debranding_show_enterprise=True
-    Cuando busco M en el buscador de apps
-    Entonces M aparece
+    Y una búsqueda ORM directa conserva M
+    Y se conserva el dominio previo de la acción
 ```
 
-## BN-03 — Provider de pago de pago (módulos a comprar) oculto
+## BN-03 — Proveedor de pago Enterprise oculto en catálogo
 
 ```gherkin
 Funcionalidad: Ocultar providers module_to_buy
@@ -52,11 +48,12 @@ Funcionalidad: Ocultar providers module_to_buy
   Quiero no ver los métodos de pago de módulos de pago en el sistema
   Para no ofrecer compras desde la UI
 
-  Escenario: filtro y escape
+  Escenario: presentación sin alterar pagos
     Dado payment.provider P con module_to_buy=True
-    Cuando busco P con search_fetch
-    Entonces P no aparece en el resultado
-    Y con contexto debranding_show_enterprise=True P aparece
+    Cuando abro la acción de catálogo de proveedores
+    Entonces P no aparece en el listado filtrado
+    Y una búsqueda ORM directa puede encontrar P
+    Y P puede participar en el cálculo de compatibilidad si cumple sus reglas
 ```
 
 ## BN-04 — Ajustes sin widgets de upgrade
@@ -72,6 +69,7 @@ Funcionalidad: Ajustes sin upgrade_boolean
     Cuando uso get_views(V)
     Entonces el arch devuelto no contiene 'upgrade_boolean'
     Y el campo sigue existiendo en el arch
+    Y el setting o el campo queda invisible
 ```
 
 ## BN-05 — Menús de tiendas recolocados
@@ -123,16 +121,21 @@ Funcionalidad: Templates de correo legados de auth_signup ERPICO
   Quiero que los correos pre-almacenados no muestren marca Odoo
 
   Escenario: parche tras instalación/upgrade
-    Dado que los 4 mail.template de auth_signup tienen body_html
+    Dado un mail.template de auth_signup con body_html original en inglés
     Cuando se instala o actualiza el módulo
-    Entonces cada body_html contiene "ERPICO"
-    Y no contiene "odoo.com" ni "Odoo Tour"
+    Entonces se aplican los reemplazos de marca definidos cuando corresponda
     Y el patcheo es idempotente (segunda ejecución = 0 cambios)
 
+  Escenario: plantilla personalizada
+    Dado un asunto o cuerpo personalizado
+    Cuando se instala o actualiza el módulo
+    Entonces se conserva el campo personalizado
+
   Escenario: bot interno
-    Dado el partner OdooBot
+    Dado el partner base.partner_root con nombre e imagen originales
     Cuando se instala o actualiza el módulo
     Entonces su nombre es "ERPICO Assistant"
+    Y un contacto distinto con nombre OdooBot no cambia
 ```
 
 ## BN-09 — Gestión de base de datos bloqueada en UI
@@ -144,11 +147,15 @@ Funcionalidad: Bloquear la consola de BD
   Para no exponer operaciones de administración de la base
 
   Escenario: rutas bloqueadas
+    Dado que la base con el addon está seleccionada
     Cuando solicito GET /web/database/manager
     Entonces el código de estado es 403
     Cuando solicito GET /web/database/selector
     Entonces el código de estado es 403
 ```
+
+Sin base seleccionada, la protección depende de `list_db`, `dbfilter` y proxy;
+el addon no garantiza que las rutas globales devuelvan 403.
 
 ## BN-10 — Portal de ventas/compra sin botón de conectarse
 
@@ -162,7 +169,14 @@ Funcionalidad: Portal sale/purchase debranded
     Dado erpico_debranding_sale instalado
     Cuando renderizo el portal de una cotización
     Entonces no aparece el botón ni el modal de conexión
+
+  Escenario: reporte de compra con EDI disponible
+    Dado un proveedor con acceso al portal y EDI disponible
+    Cuando se renderiza la cotización o la orden de compra
+    Entonces no aparece el enlace al modal oculto
 ```
+
+Esta ocultación no desactiva los endpoints EDI ni sustituye controles de acceso.
 
 ## BN-11 — Recibo POS "Powered by ERPICO"
 
@@ -176,6 +190,11 @@ Funcionalidad: Recibo de venta sin marca Odoo
     Dado erpico_debranding_pos instalado
     Cuando un pedido POS genera el recibo
     Entonces la línea de marca es "Powered by ERPICO"
+
+  Escenario: pantalla de cliente
+    Dado erpico_debranding_pos instalado
+    Cuando se muestra la pantalla de cliente
+    Entonces las dos referencias al logo Odoo se sustituyen por ERPICO
 ```
 
 ---
@@ -185,13 +204,13 @@ Funcionalidad: Recibo de venta sin marca Odoo
 | Historia | Superficie | Test automatizado | QA manual/HTTP |
 |---|---|---|---|
 | BN-01 | S1, S2 | `TestDebrandingHttp::test_login_debranded` | login 5783 bytes |
-| BN-02 | S3 | `TestEnterpriseHidden::test_module_to_buy_hidden_*` | contadores apps |
-| BN-03 | S4 | `TestEnterpriseHidden::test_payment_provider_*` | — |
+| BN-02 | S3 | `TestEnterpriseHidden::test_module_hidden_only_in_catalog_action` | validar catálogo del entorno |
+| BN-03 | S4 | `TestEnterpriseHidden::test_provider_hidden_only_in_catalog_action` | checkout sandbox pendiente |
 | BN-04 | S5 | `TestSettingsView::test_get_views_strips_upgrade_boolean` | — |
 | BN-05 | S7 | `TestMenus::test_store_menus_reparented` | — |
 | BN-06 | S8 | `TestBrandedRenders::test_brand_promotion_message` | — |
 | BN-07 | S9 | `TestBrandedRenders::test_mail_layout_render` | renders shell |
 | BN-08 | S10 | `TestLegacyEmails::*` | renders + idempotencia |
 | BN-09 | S11 | `TestDebrandingHttp::test_database_*` | curl 403 |
-| BN-10 | S12 | — (manual) | render portal |
-| BN-11 | S13 | — (manual) | render recibo |
+| BN-10 | S12 | `TestSalePortalDebranding` y `TestSalePortalOverride` | validar portal y reportes con integraciones del entorno |
+| BN-11 | S13 | `TestPosReceiptDebranding` y Hoot `debranding.test.js` | impresión física y offline pendientes |

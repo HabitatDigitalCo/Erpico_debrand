@@ -8,6 +8,10 @@ from odoo.addons.web.controllers.database import Database as WebDatabase
 
 
 class ErpicoDebranding(WebDatabase):
+    """Supplementary UI blocking only when this addon is loaded for the DB.
+
+    Database-free routes and /web/database/list require deployment controls.
+    """
 
     @http.route('/web/database/manager', type='http', auth='none')
     def manager(self, **kw):

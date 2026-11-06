@@ -11,15 +11,18 @@ El debranding es inmediato tras la instalación:
 
 - Página de login: título y favicon **ERPICO**, logo isotipo, footer
   "Powered by ERPICO" y sin enlace a gestión de bases de datos.
-- Apps: los módulos de Odoo Enterprise (``to_buy``) dejan de listarse en el
-  buscador y en los contadores.
-- Ajustes: la tarjeta "About" y los widgets de upgrade desaparecen.
+- Catálogos de Apps y proveedores de pago: las acciones de listado ocultan
+  registros marcados Enterprise. Las búsquedas internas y los pagos no se filtran.
+  Esto es presentación, no un control de acceso.
+- Ajustes: la tarjeta "About" se reemplaza y las opciones con el widget
+  ``upgrade_boolean`` se ocultan.
 - Portal/web: footer "Powered by ERPICO".
-- Emails: los layouts de correo y las plantillas de ``auth_signup`` muestran
-  "Powered by ERPICO" (la migración ``19.0.1.1.0`` parchea los `mail.template`
-  que almacenan ``body_html`` con marca Odoo).
-- Las rutas ``/web/database/manager`` y ``/web/database/selector`` devuelven
-  403.
+- Emails: layouts dinámicos y plantillas inglesas originales se debrandan.
+  Las plantillas personalizadas se conservan y pueden contener marca Odoo;
+  otros idiomas requieren validación y adaptación independiente.
+- Con la base del addon seleccionada, el controlador rechaza las rutas de
+  gestión de bases enumeradas en ``controllers/main.py``. Sin base seleccionada
+  puede no cargarse; ``/web/database/list`` no se modifica.
 
 Para el portal de ventas/compra y el recibo POS, instalar además los módulos
 compañeros:
@@ -29,5 +32,6 @@ compañeros:
     odoo -d <base> -i erpico_debranding_sale
     odoo -d <base> -i erpico_debranding_pos
 
-Para volver a mostrar los módulos Enterprise (auditorías), activar el
-contexto ``debranding_show_enterprise=True`` en las búsquedas.
+Para revertir cambios persistentes en plantillas, avatar o menús, usar un
+respaldo previo de base y filestore: desinstalar o ejecutar ``-u`` no restaura
+automáticamente los valores anteriores.

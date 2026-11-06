@@ -1,63 +1,52 @@
-# Spec v1 — Recibo de punto de venta "Powered by ERPICO"
+# Especificación — Debranding POS 19.0.1.1.0
 
-**Fecha:** 2026-09-17
-**Estado:** Implementada y verificada
-**Superficie:** S13
-**Módulo:** `erpico_debranding_pos` (19.0.1.0.0)
+## Alcance
 
----
+- Sustituir el pie `Powered by Odoo` del recibo por `Powered by ERPICO`.
+- Sustituir las dos referencias al logo Odoo en la pantalla de cliente por
+  `ERPICO`, sin alterar el logo propio de la compañía.
+- Odoo Community 19; dependencia declarada: `point_of_sale`.
 
-## Problema
+## Implementación
 
-El recibo térmico del punto de venta de Odoo 19 imprime la línea
-"Powered by Odoo". En tienda física es la marca que ve el cliente.
+- `static/src/override/order_receipt.xml` extiende
+  `point_of_sale.OrderReceipt` en `point_of_sale.assets_prod`. El bundle oscuro
+  de Odoo incluye el bundle de producción.
+- `static/src/override/customer_display.xml` extiende
+  `point_of_sale.CustomerDisplay` en `point_of_sale.customer_display_assets`.
+- `static/tests/debranding.test.js` contiene pruebas Hoot del componente real
+  de recibo y del template de pantalla de cliente montado con un componente de
+  prueba. Los datos POS son sintéticos.
 
-## Objetivo
+## Validación
 
-El recibo de venta POS imprime "Powered by ERPICO" en el pie.
+En Odoo `19.0-20260817` y PostgreSQL 16 aislado:
 
-## Alcance (criterios de aceptación)
+- Instalación limpia de la suite: 31 pruebas Python, 0 fallos y 0 errores.
+- Actualización de los dos addons desde `19.0.1.0.1`: 11 pruebas Python, sin
+  fallos ni errores.
+- Seis pruebas Hoot en navegador: recibo de venta, devolución y recibo
+  simplificado; pantalla de cliente en estados inicial, con venta y finalizado.
+  Se verificaron 22 aserciones.
+- Registro del override en los bundles POS normal, oscuro y pantalla de cliente;
+  el test de bundle oscuro no verifica su apariencia visual.
 
-| # | Criterio | Verificación |
-|---|---|---|
-| 1 | `point_of_sale.assets_prod` incluye el override | bundle check |
-| 2 | Render del recibo (Cliente) contiene "Powered by ERPICO" | QA shell |
-| 3 | Sin "Powered by Odoo" en el pie | ídem |
+El render de componentes no sustituye una venta completa, la impresión física,
+el envío de recibos ni la validación offline. Probar hardware, impresoras y
+operaciones fiscales del entorno antes de producción.
 
-## Diseño de implementación
+La ejecución general de pruebas frontend de Odoo no se completó: se observó
+un fallo en una prueba nativa de fecha/hora. El resultado de seis pruebas
+corresponde solo al tag de este addon, no a toda la suite frontend de Odoo.
 
-`static/src/override/order_receipt.xml`:
+## Ejecución de pruebas frontend
 
-```xml
-<t t-name="erpico_debranding_pos.OrderReceipt"
-   t-inherit="point_of_sale.OrderReceipt"
-   t-inherit-mode="extension">
-    <xpath expr="//div[hasclass('order-info')]/div[last()]/span[1]"
-           position="replace">
-        <span>Powered by ERPICO</span>
-    </xpath>
-</t>
+Con una base de prueba aislada que tenga `erpico_debranding_pos` instalado,
+acceder al runner de Odoo:
+
+```text
+/web/tests?headless=true&tag=erpico_debranding_pos
 ```
 
-Se declara exclusivamente en el bundle de producción de POS
-(`point_of_sale.assets_prod`) para no afectar el resto de backends.
-
-### Reglas duras
-
-1. El override es **t-name + t-inherit**, no un template nuevo sin
-   conexión: el empaquetador del POS en 19 solo mezcla templates con
-   `<t t-inherit>`.
-2. La línea de poder se sustituye, no se duplica (en el render aparece una
-   única marca).
-3. `point_of_sale` es dependencia declarada en el manifest.
-
-## Documentos que cierra
-
-- `BDD` → BN-11.
-- `TESTS_COVERAGE.md` → QA shell bundle.
-
-## Pendientes post-release
-
-- [ ] Test automatizado QUnit/POS (Selenium de POS ad-hoc del seed) cuando
-  el CI lo admita.
-- [ ] Verificar impresión real (DYMO/ESC-POS) en tienda piloto.
+Ejecutar solo con datos sintéticos y un usuario autorizado para pruebas.
+El bundle de tests incluye los templates de recibo y pantalla de cliente.

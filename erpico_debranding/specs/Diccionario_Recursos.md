@@ -14,16 +14,19 @@ erpico_debranding/
 ├── __manifest__.py
 ├── controllers/
 │   ├── __init__.py
-│   └── main.py                 (403 en /web/database/*)
+│   └── main.py                 (bloqueo complementario de rutas de base)
 ├── data/
 │   └── ir_ui_menu.xml          (reparent)
 ├── migrations/
-│   └── 19.0.1.1.0/
-│       └── post-migrate.py
+│   ├── 19.0.1.1.0/post-migrate.py
+│   ├── 19.0.1.3.0/post-migrate.py
+│   └── 19.0.1.4.0/post-migrate.py
 ├── models/
 │   ├── __init__.py
-│   ├── base.py                 (filtros to_buy)
-│   └── res_config_settings.py  (strip upgrade_boolean)
+│   ├── actions.py              (dominios de catálogo Enterprise)
+│   ├── mail_bot.py
+│   ├── res_users.py
+│   └── res_config_settings.py  (oculta upgrade_boolean)
 ├── patches/
 │   ├── __init__.py
 │   └── legacy_emails.py        (parche idempotente)
@@ -54,14 +57,14 @@ erpico_debranding/
 
 | Xmlid | Tipo | Uso |
 |---|---|---|
-| `erpico_debranding.web_login_layout_erpico` | template QWeb | login |
-| `erpico_debranding.web_layout_erpico_footer` | template QWeb | footer web |
-| `erpico_debranding.portal_record_sidebar_erpico` | template QWeb | sidebar portal |
-| `erpico_debranding.email_layouts_rebrand` | template QWeb | layouts de email |
-| `erpico_debranding.reset_password_rebrand` | template QWeb | reset password |
-| `erpico_debranding.res_config_edition_erpico` | template OWL (assets) | tarjeta About |
-| `erpico_debranding.user_menu_items_erpico` | JS registry entry | menú de usuario |
-| `erpico_debranding.erpico_res_config_edition` | template OWL (assets) | widget About (componente registrado en `view_widgets` a nombre `res_config_edition`) |
+| `erpico_debranding.web_layout_title_favicon` | template QWeb | título y favicon |
+| `erpico_debranding.web_login_layout` | template QWeb | login |
+| `erpico_debranding.web_brand_promotion_message` | template QWeb | promoción web |
+| `erpico_debranding.portal_record_sidebar_powered_by` | template QWeb | sidebar portal |
+| `erpico_debranding.mail_notification_layout_powered_by` | template QWeb | layout de correo |
+| `erpico_debranding.mail_notification_light_powered_by` | template QWeb | layout ligero |
+| `erpico_debranding.reset_password_email_powered_by` | template QWeb | reset password |
+| `erpico_res_config_edition` | template OWL (assets) | widget About registrado como `res_config_edition` |
 
 ## 3. Templados heredados (seed) que se sobreescriben
 
@@ -74,9 +77,12 @@ erpico_debranding/
 | `mail.mail_notification_layout` | mail | `views/emails.xml` |
 | `mail.mail_notification_light` | mail | `views/emails.xml` |
 | `auth_signup.reset_password_email` | auth_signup | `views/emails.xml` |
-| `sale.portal_content_boot` | sale | `erpico_debranding_sale/views/sale_portal_templates.xml` |
-| `purchase.portal_content_boot` | purchase | `erpico_debranding_sale/views/sale_portal_templates.xml` |
+| `sale.sale_order_portal_template` | sale | `erpico_debranding_sale/views/sale_portal_templates.xml` |
+| `purchase.portal_my_purchase_order` | purchase | `erpico_debranding_sale/views/sale_portal_templates.xml` |
+| `purchase.report_purchaseorder_document` | purchase | `erpico_debranding_sale/views/purchase_report_templates.xml` |
+| `purchase.report_purchasequotation_document` | purchase | `erpico_debranding_sale/views/purchase_report_templates.xml` |
 | `point_of_sale.OrderReceipt` (order_receipt.xml) | point_of_sale | `erpico_debranding_pos/static/src/override/order_receipt.xml` |
+| `point_of_sale.CustomerDisplay` | point_of_sale | `erpico_debranding_pos/static/src/override/customer_display.xml` |
 
 ## 4. Menús tocados (data/ir_ui_menu.xml)
 
@@ -88,22 +94,25 @@ erpico_debranding/
 
 ## 5. Email templates legados parcheados (LEGACY_EMAIL_XMLIDS)
 
-| Xmlid | Plantilla | Estado post-parche |
+| Xmlid | Plantilla | Tratamiento |
 |---|---|---|
-| `auth_signup.set_password_email` | Set Password | ERPICO, sin odoo.com |
-| `auth_signup.portal_set_password_email` | Portal Set Password | ídem |
-| `auth_signup.mail_template_data_unregistered_users` | Unregistered | ídem |
-| `auth_signup.mail_template_user_signup_account_created` | Signup | ídem |
+| `auth_signup.set_password_email` | Set Password | Reemplazos si el campo inglés coincide con el original |
+| `auth_signup.portal_set_password_email` | Portal Set Password | Igual para el cuerpo |
+| `auth_signup.mail_template_data_unregistered_users` | Unregistered | Igual para el cuerpo |
+| `auth_signup.mail_template_user_signup_account_created` | Signup | Igual para el cuerpo |
 
-Todos: `body_html` reescrito con `_REPLACEMENTS` (str-safe), idempotente.
+El parche modifica el cuerpo inglés solo si coincide con el original upstream;
+el asunto inglés estándar de `set_password_email` también se corrige si no fue
+personalizado. Las plantillas personalizadas y otros idiomas pueden conservar
+marca Odoo. El parche es idempotente.
 
-## 6. Registros de datos (seed) no tocados pero relevantes
+## 6. Registros de datos relevantes
 
 | Registro | Por qué importa |
 |---|---|
-| partner `OdooBot` (inactivo) | renombrado a `ERPICO Assistant` |
-| `payment.provider` con `module_to_buy=True` | ocultos por filtro |
-| `ir.module.module` con `to_buy=True` | ocultos por filtro |
+| `base.partner_root` | se rebranda solo si corresponde a identidad estándar; se preservan personalizaciones |
+| `payment.provider` con `module_to_buy=True` | ocultos en acciones de catálogo, no en búsquedas ORM |
+| `ir.module.module` con `to_buy=True` | ocultos en acciones de catálogo, no en búsquedas ORM |
 
 ## 7. Assets declarados en manifest
 
@@ -121,11 +130,17 @@ web.assets_frontend:
 ```
 point_of_sale.assets_prod:
   erpico_debranding_pos/static/src/override/order_receipt.xml
+point_of_sale.customer_display_assets:
+  erpico_debranding_pos/static/src/override/customer_display.xml
+web.assets_unit_tests:
+  templates de pantalla de cliente y tests Hoot de debranding
 ```
 
 ### `erpico_debranding_sale`
 ```
-data: [views/sale_portal_templates.xml]
+data:
+  views/sale_portal_templates.xml
+  views/purchase_report_templates.xml
 ```
 
 ## 8. Assets de marca importados (estáticos)

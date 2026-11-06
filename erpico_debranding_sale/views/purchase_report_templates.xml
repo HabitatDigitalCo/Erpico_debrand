@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="purchase_order_hide_connect_software" inherit_id="purchase.report_purchaseorder_document">
+        <xpath expr="//div[a[@t-att-href='portal_url']]" position="replace"/>
+    </template>
+
+    <template id="purchase_quotation_hide_connect_software" inherit_id="purchase.report_purchasequotation_document">
+        <xpath expr="//div[a[@t-att-href='portal_url']]" position="replace"/>
+    </template>
+</odoo>

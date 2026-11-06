@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="point_of_sale.CustomerDisplay" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o_customer_display_sidebar')]/div/OdooLogo" position="replace">
+            <b>ERPICO</b>
+        </xpath>
+        <xpath expr="//div[hasclass('o_customer_display_main')]//div/OdooLogo" position="replace">
+            <b>ERPICO</b>
+        </xpath>
+    </t>
+</templates>

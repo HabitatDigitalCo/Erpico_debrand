@@ -1,6 +1,17 @@
 Changelog
 =========
 
+19.0.1.4.0 (2026-11-06 UTC)
+---------------------------
+* Oculta opciones Enterprise en acciones de catálogo y ajustes sin filtrar
+  búsquedas internas de módulos o proveedores de pago.
+* Protege contactos homónimos, imágenes y plantillas personalizadas.
+* Actualiza el asunto inglés original de invitación e incorpora migración
+  para instalaciones existentes.
+* Documenta límites de rutas de bases y reversión de datos persistentes.
+* Instalación limpia: 20 pruebas, sin fallos; upgrade sintético desde
+  ``19.0.1.3.0`` verificado en Odoo Community 19.
+
 19.0.1.3.0 (2026-09-22)
 -----------------------
 * Bot de chat neutro: texto de bienvenida sin marca Odoo

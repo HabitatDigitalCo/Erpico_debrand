@@ -29,11 +29,24 @@ obvios, añadir un bloque en *Detalle de bugs abiertos*. Al resolverlo, moverlo 
 
 | ID | Fecha | Vista / Origen | Descripción | Tipo | Prioridad | Estado |
 |----|-------|----------------|-------------|------|-----------|--------|
-| *(ninguno)* | | | | | | |
+| BUG-016 | 2026-11-06 UTC | Rutas de BD | El controlador del addon puede no cargarse sin base seleccionada; `/web/database/list` no se sobrescribe. Requiere controles externos probados. | Seguridad / Config | 🟠 Alta | Pendiente-config |
 
 ---
 
 ## Bugs Resueltos
+
+Resuelto en código y validado en `19.0.1.4.0` (2026-11-06 UTC; sin commit
+registrado en este workspace):
+
+| ID | Vista / Origen | Descripción | Tipo | Prioridad | Solución |
+|----|----------------|-------------|------|-----------|----------|
+| BUG-012 | ORM de proveedores | Filtro global excluía proveedores `to_buy` del cálculo de compatibilidad y discrepaba con `search_count`. | Lógica | 🟠 Alta | Filtrar acciones de catálogo, no búsquedas; prueba sintética de compatibilidad. |
+| BUG-013 | Parche del bot | Se renombraban contactos ajenos llamados `OdooBot` y podía sustituirse imagen personalizada. | Datos | 🟠 Alta | Usar `base.partner_root` y preservar identidad personalizada. |
+| BUG-014 | Invitación `auth_signup` | Asunto inglés original conservaba marca Odoo. | UI/UX | 🟡 Media | Actualizar solo asunto original y probar render; otros idiomas pendientes. |
+| BUG-015 | Ajustes | Quitar el widget podía dejar visible el control Enterprise. | UI/UX | 🟡 Media | Ocultar el `setting` o campo sin eliminar el campo de la arquitectura. |
+
+Las siguientes entradas son históricas: soluciones antiguas como el filtro
+global de `BUG-006` fueron sustituidas por `19.0.1.4.0`.
 
 Resuelto el **2026-09-22** (versión `19.0.1.3.0`):
 

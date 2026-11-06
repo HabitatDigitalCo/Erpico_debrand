@@ -1,6 +1,6 @@
 {
     'name': 'Erpico Debranding',
-    'version': '19.0.1.3.0',
+    'version': '19.0.1.4.0',
     'category': 'Hidden',
     'summary': 'Remove Odoo branding from UI, emails and portal (Odoo 19)',
     'description': """
@@ -12,8 +12,9 @@ Módulo base de la suite de debranding ERPICO. Los módulos
 `erpico_debranding_sale` y `erpico_debranding_pos` extienden su alcance al
 portal de ventas/compra y al recibo de punto de venta.
 
-Todos los cambios se aplican por herencia XML/QWeb/JS/SCSS; nunca se modifica
-el código del seed, y todo es revertible con `-u`.
+Las acciones de catálogo se filtran en la interfaz; las operaciones internas
+no se filtran. El hook modifica datos existentes de forma limitada: consulte
+la documentación de respaldo y rollback antes de instalar o actualizar.
     """,
     'author': 'Habitat Digital',
     'website': 'https://github.com/Vankisito/DebrandingERPICO',

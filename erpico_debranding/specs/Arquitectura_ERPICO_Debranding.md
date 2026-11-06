@@ -1,98 +1,62 @@
-# Arquitectura — `erpico_debranding` (núcleo)
+# Arquitectura — `erpico_debranding` 19.0.1.4.0
 
-Cuando un humano o un agente IA mira este módulo, **esto es lo que hay que
-ver**: de qué dependen los cambios, dónde vive cada override y qué artefacto
-consumidor los recoge. No es un manual de setup (va en `readme/`).
+Addon núcleo para Odoo Community 19. Adapta presentación y ciertos datos de
+marca; no es frontera de seguridad ni aislamiento SaaS. Los addons de POS y
+portal de ventas/compras son independientes y requieren validación propia.
 
----
+## Acciones y ajustes
 
-## 1. Capa de datos (más vieja, más estable)
+| Archivo | Comportamiento |
+|---|---|
+| `models/actions.py` | En `_get_action_dict`, agrega `to_buy=False` a acciones de listado de `ir.module.module` y `module_to_buy=False` a listados de `payment.provider`, conservando el dominio existente. No modifica la acción persistida. |
+| `models/res_config_settings.py` | En las arquitecturas de ajustes, oculta el `setting` que contiene un campo `upgrade_boolean` —o el campo si no hay `setting`— y elimina el atributo del widget. |
+| `data/ir_ui_menu.xml` | Reubica tres menús nativos de tiendas; es un cambio persistente en registros existentes. |
 
-| Componente | Qué hace | Quién lo consume |
-|---|---|---|
-| `data/ir_ui_menu.xml` | infijo `ir.ui.menu`: 3 menús de tiendas reparent bajo `menu_ir_property` | La parte donde los menús de apps viven; evita pasarelas de venta públicas |
-| `demo/` | — | No uses demo aquí; el debranding no necesita datasets |
-| `migrations/19.0.1.1.0/post-migrate.py` | Reemplazos de marca en `mail.template.body_html` de auth_signup + renombra el bot | Bases que **ya tenían** datos antes del upgrade |
+Los filtros aplican a las acciones descritas, no a toda entrada posible de UI,
+RPC o vistas de un solo registro. No filtran `search`, `search_fetch`,
+`search_count` ni el cálculo de proveedores compatibles; tampoco constituyen
+ACL o record rules. El antiguo contexto `debranding_show_enterprise` y los
+overrides globales de `models/base.py` ya no forman parte del código fuente.
 
-## 2. Capa de negocio (modelos)
+## Marca y presentación
 
-| Modelo | Método | Qué hace |
-|---|---|---|
-| `models/base.py` — `Base` (`_inherit='base'`) | `search_fetch(drilldown)` / `search_count(domain)` | Filtra `ir.module.module` por `to_buy=False` (solo los módulos instalables Community), escape por contexto `debranding_show_enterprise`; igual para `payment.provider.module_to_buy` |
-| `models/res_config_settings.py` | `get_views(views)` | **lxml** remueve `widget="upgrade_boolean"` de los archs de settings antes de devolverlos |
-| `models/base.py` — `Models` generales | — | Sin otros hooks; la herencia se limita a lo listado |
+- `views/templates.xml`, `views/portal.xml` y `views/emails.xml`: herencias
+  QWeb de login, portal y layouts dinámicos de correo.
+- `static/src/js/` y `static/src/settings_form_view/`: menú de usuario,
+  notificaciones y tarjeta About; se cargan mediante assets del manifest.
+- `models/mail_bot.py` y `models/res_users.py`: mensajes del bot. Los textos
+  que dependen de traducciones deben probarse por idioma.
 
-Detalle de `models/base.py` (el meollo del filtro Enterprise):
+## Datos persistentes y migración
 
-```python
-@api.model
-def search_fetch(self, domain, field_names=None, **kwargs):
-    if self._name == 'ir.module.module' \
-            and not self.env.context.get('debranding_show_enterprise'):
-        domain = [*domain, ('to_buy', '=', False)]
-    elif self._name == 'payment.provider' \
-            and not self.env.context.get('debranding_show_enterprise'):
-        domain = [*domain, ('module_to_buy', '=', False)]
-    return super().search_fetch(domain, field_names=field_names, **kwargs)
-```
+El `post_init_hook(env)` llama a `patch_legacy_emails(env)` y
+`_rebrand_bot_partner(env)`. Las migraciones reutilizan esos helpers, incluida
+`19.0.1.4.0/post-migrate.py` para la actualización correspondiente.
 
-Regla del dominio: **AND por concatenación de listas**, nunca
-`odoo.osv.expression` (el API 19 lo deprecó).
+- El parche de correo compara la plantilla inglesa almacenada con el original
+  de `auth_signup`: modifica el cuerpo solo si coincide con el original y el
+  asunto solo si coincide con el original. Si ya está parcheado no repite la
+  escritura; no reescribe cuerpos o asuntos personalizados.
+- La identidad del bot se localiza por `base.partner_root`. Se respetan nombre
+  e imagen personalizados; el avatar se sustituye solo si está vacío o coincide
+  con el original y el nombre es el estándar o el de ERPICO.
+- Los cambios históricos ya aplicados no se revierten automáticamente con
+  `-u` ni al desinstalar. La recuperación requiere respaldo adecuado y proceso
+  de restauración validado.
 
-## 3. Capa de presentación (lo que ve el usuario)
+## Rutas de base de datos
 
-| Superficie | Artefacto | Template/JS |
-|---|---|---|
-| Login | QWeb `web.login_layout` / `web.layout` | título, favicon, `footer Powered by ERPICO`, logo isotipo, sin link de DB |
-| Web genérica | `web.layout` | 404, errores, etc. |
-| Portal | `portal.portal_record_sidebar` | footer + branding en páginas públicas |
-| Ajustes | `res_config_edition.xml` (OWL) | tarjeta About ERPICO, sin menú de upgrade |
-| Menú usuario | `user_menu.js` (OWL registry) | quita `support` y `odoo_account` |
+`controllers/main.py` hereda `web.Database`: bloquea manager y selector y los
+POST create, duplicate, drop, backup, restore y change_password **cuando Odoo
+carga este addon para la base de la petición**. No sobrescribe
+`/web/database/list`. Sin base seleccionada, las rutas globales de Odoo pueden
+atender la petición sin cargar este controlador.
 
-Los assets se declaran en `assets` del manifest (backend y frontend) y se
-recogen en `web.assets_backend` / `web.assets_frontend`. **Nunca** inyectes
-CSS/JS por `web.assets_%s.py` heredado.
+Aplicar y probar controles externos: `list_db=False`, `dbfilter` restrictivo,
+proxy y aislamiento de infraestructura.
 
-## 4. Capa de servicios (controllers)
+## Referencias
 
-| Ruta | Controller | Respuesta |
-|---|---|---|
-| `/web/database/manager` | `Forbidden` a mano (no `@http.route` de db) | 403 |
-| `/web/database/selector` | misma técnica | 403 |
-
-El resto del `db` controller del seed queda intacto (riesgo R-001).
-
-## 5. Arranque: `post_init_hook`
-
-`__init__.py` hace `from . import controllers, models` (nada más).
-
-```python
-def post_init_hook(cr, registry):
-    from odoo.addons.erpico_debranding.patches.legacy_emails import (
-        patch_legacy_emails)
-    env = api.Environment(cr, SUPERUSER_ID, Context())
-    patched = patch_legacy_emails(env)
-    _logger.info("[erpico_debranding] legacy emails patched: %r", patched)
-```
-
-Esto solo dispara en **instalaciones nuevas** (dependencias ya cargadas);
-las bases existentes llegan por la migración.
-
-## 6. Flujo de un upgrade
-
-```
-odoo -u erpico_debranding → -u aplica migración 19.0.1.1.0
-  1. reemplazos body_html (4 templates)
-  2. renombra OdooBot → ERPICO Assistant
-  3. commitea (transaction)
-→ vistas/controllers/assets recargados → suite tests opcional
---test-enable
-```
-
-## 7. Límites del módulo
-
-- NO toca: `point_of_sale` ni portal sale/purchase (vas a los módulos
-  compañeros).
-- NO toca: endpoints POST de BD (R-001), webservice/API de Odoo (x2).
-- El debranding es **visual y de navegación**; el código del seed nunca
-  cambia.
+- Estado de pruebas y límites: `TESTS_COVERAGE.md`.
+- Procedimiento de QA: `Manual_Pruebas_Testing.md`.
+- Historial de cambios: `Changelog.md`.

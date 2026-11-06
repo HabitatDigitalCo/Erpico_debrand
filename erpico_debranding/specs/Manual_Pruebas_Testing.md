@@ -1,133 +1,70 @@
-# Manual de Pruebas y Testing — `erpico_debranding`
+# Manual de pruebas — `erpico_debranding` 19.0.1.4.0
 
-Procedimientos reproducibles para validar el debranding sin ambigüedad.
-Cada prueba referencia la superficie S# y el criterio de aceptación.
+Ejecutar instalación, upgrade y pruebas con **base y PostgreSQL aislados**,
+datos sintéticos, cron deshabilitado y sin correo ni proveedor de pago real.
+No ejecutar `--test-enable`, pruebas de upgrade ni métodos de gestión de bases
+contra una base operativa.
 
-**Entorno de referencia:** `odoo_debrand_test` (Docker), base `debrand_test`,
-`/mnt/extra-addons` montando `Custom_addons`.
+## 1. Suite del núcleo
 
----
-
-## 1. Rápido: suite automatizada
-
-```bash
-docker exec -i odoo_debrand_test odoo -d debrand_test \
-  -u erpico_debranding,erpico_debranding_sale,erpico_debranding_pos \
-  --test-enable --test-tags=erpico_debranding \
-  --http-port=8090 --no-http --stop-after-init
-```
-
-- **Expectativa:** 22/22 PASS (20 previos + `TestBotWelcomeNeutral`, desde
-  19.0.1.3.0).
-- **Ojo sintaxis de tags:** usar el tag plano (`erpico_debranding`), NO
-  `/erpico_debranding`: la barra añade filtro de módulo y excluye los tests
-  de `_sale`/`_pos`.
-- **Ojo puerto:** si el server principal del container ya corre en 8069,
-  pasar SIEMPRE `--http-port=8090 --no-http` (con `--no-http` solo, el bind a
-  8069 del proceso conviviente aborta el run).
-- Rodríguez de errores: revisar `tests/` de los 3 módulos + `log`; nunca
-  asumas que un cambio cosmético no rompe un assert.
-
-## 2. HTTP (QA manual)
-
-### 2.1 Login
+En una base sintética vacía, con Odoo 19 y el addon en `addons_path`:
 
 ```bash
-curl -L -s -o login.html -w "%{http_code} %{size_download}\n" \
-  http://localhost:8069/web/login
-grep -c "Powered by <b>ERPICO</b>" login.html   # >= 1
-grep -c "odoo.com" login.html                     # 0
-grep -c "web/database/manager" login.html         # 0
+odoo -d <base_qa> -i erpico_debranding \
+  --without-demo --test-enable --test-tags=erpico_debranding \
+  --http-port=18090 --no-http --max-cron-threads=0 --stop-after-init
 ```
 
-**Aceptación:** 200, ≈5783 bytes, footer ERPICO, sin links de DB.
+Usar un puerto libre: aun con `--no-http`, `HttpCase` puede iniciar un servidor
+de pruebas. La base QA no debe ser visible desde la instancia real. El tag
+plano también selecciona tests de addons compañeros si están instalados;
+para limitar por módulo consultar la configuración de tags de Odoo usada.
 
-### 2.2 404
+Resultado observado: **20 pruebas, 0 fallos y 0 errores** en instalación limpia
+con Odoo `19.0-20260817`. Esto cubre únicamente el núcleo.
 
-```bash
-curl -L -s -o nf.html -w "%{http_code}\n" http://localhost:8069/no-existe
-grep -c "ERPICO" nf.html  # >= 1
-grep -c "odoo.com" nf.html # 0
-```
+## 2. Validación funcional
 
-### 2.3 Rutas de BD
+- Apps y proveedores: probar dominio de las acciones, preservar el dominio
+  previo y confirmar que `search`/`search_count` no ocultan registros.
+- Pagos: con proveedor sintético marcado `to_buy`, verificar el cálculo de
+  compatibilidad sin cobrar ni contactar servicios externos. Repetir pruebas
+  de checkout con cada proveedor real en sandbox antes de promocionar.
+- Correos: comprobar asunto y cuerpo renderizados en `en_US`, enlaces y
+  conservación de contenido personalizado. No enviar correo real. Probar
+  traducciones según idiomas aprobados; el español está pendiente.
+- Bot: verificar partner `base.partner_root`, imagen estándar y preservación
+  de nombre/imagen personalizados; un contacto homónimo debe permanecer intacto.
+- Ajustes: inspeccionar arquitectura y validar que el `setting` con
+  `upgrade_boolean` quede invisible.
 
-```bash
-for r in /web/database/manager /web/database/selector; do
-  curl -s -o /dev/null -w "$r %{http_code}\n" "http://localhost:8069$r"
-done
-# POST (R-001, desde 19.0.1.2.0)
-for r in create duplicate drop backup restore change_password; do
-  curl -s -o /dev/null -w "POST /web/database/$r %{http_code}\n" \
-    -X POST -d "master_pwd=x" "http://localhost:8069/web/database/$r"
-done
-```
+## 3. HTTP y seguridad
 
-**Aceptación:** todos 403 (GET y POST).
-**Fuera de alcance:** JSON-RPC `/web/database/list` (compat móvil).
+En entorno aislado, verificar login 200, marca ERPICO e imagen accesible.
+Con la base del addon seleccionada, comprobar manager, selector y los POST
+enumerados en `controllers/main.py`. Las pruebas `HttpCase` dieron 403 con
+base seleccionada; no prueban la protección global sin base.
 
-### 2.4 Assets
+Repetir con sesión nueva y **sin base seleccionada**, con `list_db=False`,
+`dbfilter` y proxy de despliegue. Validar también `/web/database/list` y las
+interfaces RPC aplicables. No ejecutar operaciones destructivas ni exponer
+contraseñas en comandos, registros o capturas.
 
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" \
-  "http://localhost:8069/erpico_debranding/static/src/img/erpico-isotipo.png"
-```
+Un 403 con base seleccionada no demuestra que se bloqueen rutas globales.
+El addon no sustituye la configuración externa.
 
-**Aceptación:** 200.
+## 4. Upgrade y rollback
 
-## 3. Shell de Odoo (renders)
+1. Preparar base sintética con la versión anterior, contenido personalizado y
+   filestore aislado. Respaldar ambos antes de actualizar.
+2. Actualizar a la versión candidata; confirmar versión, datos personalizados,
+   asunto original, acción de catálogo y funcionamiento del login.
+3. Restaurar base **y** filestore en otro entorno aislado. Comprobar registros y
+   existencia de archivos adjuntos; completar pruebas de negocio pertinentes.
+4. Desinstalar o ejecutar `-u` no equivale a restaurar datos anteriores.
 
-```bash
-docker exec -i odoo_debrand_test odoo shell -d debrand_test \
-  --db_host=db --db_user=odoo --db_password=odoo --no-http <<'EOF'
-# Renders de emails legados
-from odoo.addons.erpico_debranding.patches.legacy_emails import (
-    LEGACY_EMAIL_XMLIDS)
-for x in LEGACY_EMAIL_XMLIDS:
-    tpl = env.ref(x)
-    html = str(tpl._render_field('body_html', {}) or '')
-    checks = ('ERPICO' in html, 'odoo.com' in html, 'Odoo Tour' in html)
-    print(x, checks)
-# Idempotencia
-from odoo.addons.erpico_debranding.patches.legacy_emails import (
-    patch_legacy_emails)
-print('patched:', patch_legacy_emails(env))
-# Bot
-bots = env['res.partner'].search(
-    [('name', '=', 'OdooBot'), ('active', 'in', (True, False))])
-print('OdooBot count:', len(bots))
-EOF
-```
+## 5. Validaciones complementarias
 
-**Aceptación:** todos `(True, False, False)`, `patched: []`, count 0.
-**Ojo BUG-003:** si EScribes algo, `env.cr.commit()`.
-
-## 4. Renders QWeb dinámicos
-
-```bash
-# brand promotion
-env['ir.ui.view']._render('web.brand_promotion_message')
-# mail layout
-env['ir.ui.view']._render('mail.mail_notification_layout')
-# recibo POS
-env['ir.ui.view']._render(
-    'point_of_sale.OrderReceipt', values={'order': order})
-```
-
-**Aceptación:** ERPICO in / odoo.com out.
-
-## 5. Checklist humano de aceptación en UI
-
-1. Login: no ver "Odoo" en ninguna parte (título, fuente, footer, tab).
-2. Apps: la App "Odoo" corporate NO aparece; "Settings" sí.
-3. Ajustes → tarjeta About dice ERPICO; ningún campo "Upgrade".
-4. Menú de usuario: sin "Support" ni "Odoo Account".
-5. Página pública de una cotización (portal): sin botón "Connect with your
-   software!".
-6. Recibo POS: footer "Powered by ERPICO".
-7. `/web/database/manager` por URL directa → 403.
-
----
-
-*Repetir la suite completa antes de cada release. Resultados →
-`TESTS_COVERAGE.md`.*
+Validar webclient en navegador, traducciones, checkout en sandbox y addons de
+POS/ventas cuando sean relevantes. Registrar resultados por entorno sin incluir
+credenciales ni datos sensibles. Ver cobertura del núcleo en `TESTS_COVERAGE.md`.

@@ -1,80 +1,40 @@
-# TESTS_COVERAGE.md — Suite `erpico_debranding`
+# Cobertura de pruebas — `erpico_debranding` 19.0.1.4.0
 
-Matriz de trazabilidad: superficie → prueba → resultado. Dos familias:
-**automatizados** (tests Odoo `--test-enable`) y **manuales/HTTP** (sesión
-de QA final).
+## Ejecución automatizada del núcleo
 
----
+Odoo Community `19.0-20260817`, PostgreSQL 16 aislado, base sintética nueva,
+sin demo y sin cron. Resultado reportado por Odoo: **20 tests, 0 fallos y 0
+errores**, 2026-11-06 UTC. Comando y precauciones:
+`Manual_Pruebas_Testing.md`.
 
-## 1. Suite automatizada — suite completa (3 módulos)
+| Clase | Cobertura | Casos |
+|---|---|---:|
+| `TestLegacyEmails` | Cuerpos originales, asunto/cuerpo renderizados, bot estándar, protección de contacto homónimo y plantillas/nombre/imagen personalizados | 6 |
+| `TestEnterpriseHidden` | Dominios de catálogo, dominio original, búsqueda/conteo ORM y compatibilidad de proveedor sintético | 3 |
+| `TestSettingsView` | Eliminación del widget y, si el setting aparece, condición de ocultación | 1 |
+| `TestMenus` | Reubicación de tres menús de tiendas | 1 |
+| `TestBrandedRenders` | Render de promoción y layout de correo | 2 |
+| `TestDebrandingHttp` | Login, manager, selector y seis POST con base seleccionada | 4 |
+| `TestPatchMigrationParity` | Idempotencia del parche compartido | 1 |
+| `TestBotWelcomeNeutral` | Bienvenida, avatar y respuesta de onboarding | 2 |
 
-Ejecución:
+La prueba de ajustes comprueba la invisibilidad solo si el setting está presente;
+no sustituye una revisión de todas las vistas de addons instalados.
 
-```bash
-odoo -d debrand_test -u erpico_debranding,erpico_debranding_sale,erpico_debranding_pos \
-  --test-enable --test-tags=erpico_debranding
-```
+## Upgrade y restauración
 
-> **Nota de sintaxis:** `--test-tags=erpico_debranding` (tag plano, sin `/`).
-> `--test-tags=/erpico_debranding` restringe al módulo exacto
-> `erpico_debranding` (el `/` implica `standard` + filtro de módulo) y deja
-> fuera los tests de `_sale`/`_pos`.
+- Upgrade sintético `19.0.1.3.0` → `19.0.1.4.0`: conservó contacto homónimo,
+  nombre e imagen del bot y plantilla personalizados; se verificaron asunto
+  estándar y dominio del catálogo.
+- La validación de recuperación debe repetirse por entorno, incluyendo base,
+  filestore y pruebas de negocio; consultar el manual.
 
-| Clase | Caso | Superficie | Assert clave | Resultado |
-|---|---|---|---|---|
-| `TestLegacyEmails` | `test_legacy_bodies_rebranded` | S10 | 4 xmlids: `ERPICO` in body; `odoo.com`/`Odoo Tour` out | ✅ |
-| `TestLegacyEmails` | `test_bot_partner_renamed` | D-05 | sin partner `OdooBot` (incl. inactivos) | ✅ |
-| `TestEnterpriseHidden` | `test_module_to_buy_hidden_from_search_fetch` | S3 | `search`/`search_fetch`/`search_count` filtran; escape `debranding_show_enterprise` | ✅ |
-| `TestEnterpriseHidden` | `test_payment_provider_module_to_buy_hidden` | S4 | provider `module_to_buy=True` oculto en `search`/`search_fetch`; contexto escape | ✅ |
-| `TestEnterpriseHidden` | `test_search_handles_legacy_domains` | S3/S4 | domains `None`/tuple no rompen; filtro sigue activo | ✅ |
-| `TestSettingsView` | `test_get_views_strips_upgrade_boolean` | S5 | arch sin `upgrade_boolean`, campo conservado | ✅ |
-| `TestMenus` | `test_store_menus_reparented` | S7 | 3 menús padre = `menu_ir_property` | ✅ |
-| `TestBrandedRenders` | `test_brand_promotion_message` | S8 | ERPICO in, Odoo/odoo.com out | ✅ |
-| `TestBrandedRenders` | `test_mail_layout_render` | S9 | `mail_notification_layout` ERPICO in, odoo.com out | ✅ |
-| `TestPatchMigrationParity` | `test_replacements_parity` | S10 | paridad `_REPLACEMENTS`/xmlids/patterns patch ↔ migración | ✅ |
-| `TestPatchMigrationParity` | `test_patch_idempotent` | S10 | 2ª ejecución del parche = 0 patcheos | ✅ |
-| `TestDebrandingHttp` | `test_database_manager_blocked` | S11 | 403 | ✅ |
-| `TestDebrandingHttp` | `test_database_selector_blocked` | S11 | 403 | ✅ |
-| `TestDebrandingHttp` | `test_login_debranded` | S1/S2/S8 | 200; ERPICO footer; sin manager link; favicon isotipo | ✅ |
-| `TestDebrandingHttp` | `test_database_post_endpoints_blocked` | S11/R-001 | 6 POST de BD → 403 | ✅ |
-| `TestSalePortalDebranding` (sale) | `test_sale_order_portal_hides_connect_software` | S12 | portal `/my/orders` sin "Connect with your software!" ni modal | ✅ |
-| `TestSalePortalDebranding` (sale) | `test_purchase_order_portal_hides_connect_software` | S12 | portal `/my/purchase` sin "Connect with your software!" ni modal | ✅ |
-| `TestSalePortalOverride` (sale) | `test_sale_override_templates_registered` | S12 | los 2 overrides QWeb existen | ✅ |
-| `TestPosReceiptDebranding` (pos) | `test_override_registered_in_assets` | S13 | `order_receipt.xml` en `point_of_sale.assets_prod` (`_get_asset_paths`) | ✅ |
-| `TestPosReceiptDebranding` (pos) | `test_override_targets_order_receipt` | S13 | t-inherit `OrderReceipt` + footer ERPICO, sin "Powered by Odoo" | ✅ |
+## Pendiente y límites
 
-| `TestBotWelcomeNeutral` | `test_init_odoobot_neutral` | S-bot (2026-09-22) | bienvenida `_init_odoobot` sin "Odoo"/odoo.com; partner = ERPICO Assistant con imagen | ⏳ |
-| `TestBotWelcomeNeutral` | `test_get_answer_neutralizes` | S-bot (2026-09-22) | `_get_answer('help')` → `@ERPICO Assistant`, sin `OdooBot` | ⏳ |
-
-> Desde `58367ba` (BUG-006): la cobertura de S3/S4 incluye `.search()` plano.
-> Desde `19.0.1.2.0`: cobertura R-001 (POST), paridad parche/migración,
-> domains legacy, S12 y S13 automatizados.
-> Desde `19.0.1.3.0`: `TestBotWelcomeNeutral` (bot neutro y respuestas)
-> pendiente de correr en la validación con Docker.
-
-## 2. QA manual / HTTP (sesión final reportada)
-
-| Caso | Comando / método | Esperado | Resultado |
-|---|---|---|---|
-| Login HTML size | `curl -L /web/login` | ≈5783 bytes | ✅ |
-| Logo isotipo | `GET /erpico_debranding/static/src/img/erpico-isotipo.png` | 200 | ✅ |
-| 404 page | `curl -L /inexistente` | code 404 + ERPICO + no odoo.com | ✅ |
-| Manager/Selector UI | `curl /web/database/manager`, `/web/database/selector` | 403 | ✅ |
-| POST de BD real | `POST /web/database/create` (body cualquiera) | 403 | ✅ (2026-09-18, server 8070) |
-| Contadores de apps | UI `Inicio → Ajustes` (contadores) | sin módulos Enterprise | ✅ |
-| Renders email legados | shell `_render_field('body_html')` | ERPICO in, 0 "Odoo" | ✅ |
-| Idempotencia parche | re-llamada `patch_legacy_emails` | 0 nuevos patcheos | ✅ |
-| Renombrado bot | `res.partner` search `OdooBot` | 0 resultados | ✅ |
-| Recibo POS | render `order_receipt.xml` (punto de venta) | "Powered by ERPICO" | ✅ |
-| Portal sale/purchase | render QWeb `portal_content_boot` overrides | sin "Connect with your software!" | ✅ |
-
-## 3. Resultado global
-
-- **Automatizados:** 20/20 ✅ (`--test-tags=erpico_debranding`, 2026-09-18) + 2 nuevos pendientes de validación con Docker
-- **QA manual/HTTP:** 11/11 ✅ (2026-09-17 + POST real 2026-09-18)
-- **Riesgo residual:** `/web/database/list` JSON-RPC activo (compat móvil) →
-  mitigable en deploy con `list_db = False` + proxy.
-
----
-
-*Actualizar este documento en cada sesión de QA.*
+- Sin prueba de pago real, checkout de navegador ni integración de proveedores.
+- Sin validación de traducciones distintas de `en_US`; plantillas personalizadas
+  pueden conservar marca Odoo.
+- Sin prueba completa de webclient tras este upgrade.
+- La ejecución de 20 tests del núcleo no incluye los addons adicionales. Para
+  la validación conjunta y sus límites, consultar las specs de POS y ventas.
+- Las pruebas HTTP del addon no demuestran seguridad sin base seleccionada.

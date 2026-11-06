@@ -1,5 +1,9 @@
 # Plan de Desarrollo — Suite `erpico_debranding`
 
+> **Histórico:** desde `19.0.1.4.0` cambiaron el filtro Enterprise, la
+> preservación de datos y los límites de rollback y rutas de base. Consultar
+> `Arquitectura_ERPICO_Debranding.md` y `TESTS_COVERAGE.md`.
+
 **Proyecto:** Debranding ERPICO — Odoo 19 Community
 **Plataforma:** Odoo 19.0 (build 20260619), Docker Compose
 **Autor:** Habitat Digital

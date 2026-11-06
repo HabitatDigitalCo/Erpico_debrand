@@ -1,5 +1,9 @@
 # Spec v1 — Parche de emails legados en `auth_signup`
 
+> **Histórico:** desde `19.0.1.4.0`, solo se modifica cada campo inglés que
+> coincide con su original upstream; se preservan personalizaciones y contactos
+> homónimos. Ver arquitectura, decisiones D-04/D-16 y cobertura actual.
+
 **Fecha:** 2026-09-17
 **Estado:** Implementada y verificada
 **Superficie:** S10

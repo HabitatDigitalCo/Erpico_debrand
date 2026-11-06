@@ -1,64 +1,44 @@
-# Spec v1 — Portal de ventas/compra sin "Connect with your software!"
+# Especificación — Debranding de ventas y compras 19.0.1.1.0
 
-**Fecha:** 2026-09-17
-**Estado:** Implementada y verificada
-**Superficie:** S12
-**Módulo:** `erpico_debranding_sale` (19.0.1.0.0)
+## Alcance
 
----
+- Mantener Ventas y Compras en el mismo addon; dependencias: `erpico_debranding`,
+  `sale` y `purchase`. Instalar este addon requiere ambos módulos de negocio.
+- Ocultar botón y modal `Connect with your software!` en portales de venta y
+  compra, incluso cuando existen integraciones EDI.
+- Ocultar en los reportes de orden y cotización de compra el enlace al modal
+  que ya no se muestra.
 
-## Problema
+La ocultación es visual. Los endpoints `/my/orders/<id>/download_edi` y
+`/my/purchase/<id>/download_edi` no se modifican: conservan la comprobación
+de acceso y los tokens de Odoo. Para prohibir EDI se necesita una política y
+controles de servidor adicionales, fuera del alcance de este addon.
 
-El portal de Odoo 19 añade a las páginas públicas de cotizaciones y órdenes
-de compra el bloque "Connect with your software!" (`portal.portal_content_boot`
-y `sale.portal_content_boot`) con un modal de ficheros EDI. Hace referencia
-al ecosistema Odoo y a Odoo Account.
+## Implementación
 
-## Objetivo
+- `views/sale_portal_templates.xml`: hereda
+  `sale.sale_order_portal_template` y `purchase.portal_my_purchase_order`.
+- `views/purchase_report_templates.xml`: hereda
+  `purchase.report_purchaseorder_document` y
+  `purchase.report_purchasequotation_document`, eliminando el bloque con el
+  enlace al modal.
+- Los tests HTTP usan `post_install` para ejecutarse con todas las extensiones
+  instaladas cargadas.
 
-Ningún cliente externo que abra una cotización o una orden de compra
-publicada ve el botón ni su modal.
+## Validación
 
-## Alcance (criterios de aceptación)
+En Odoo `19.0-20260817` y PostgreSQL 16 aislado:
 
-| # | Criterio | Verificación |
-|---|---|---|
-| 1 | Template `sale.portal_content_boot` sin el botón | render manual |
-| 2 | Template `purchase.portal_content_boot` idem | render manual |
-| 3 | Sin referencias a `odoo.com` en la página de la cotización | QA shell |
+- Instalación limpia de la suite: 31 pruebas Python, 0 fallos y 0 errores.
+- Actualización de los dos addons desde `19.0.1.0.1`: 11 pruebas Python, sin
+  fallos ni errores.
+- Tests con EDI simulado comprueban que el botón aparece sin el override y
+  desaparece con él; también prueban portales sin token o con token inválido.
+- Los dos reportes se renderizaron a HTML con proveedor de portal y EDI
+  simulado. El enlace está presente sin override y ausente con override.
+- Se convirtieron esos HTML directamente a PDF con `wkhtmltopdf` y se comprobó
+  el texto en ambos casos. No se validó el flujo completo de generación de PDF
+  de Odoo ni el envío o impresión de esos documentos.
 
-## Diseño de implementación
-
-`views/sale_portal_templates.xml`:
-
-```xml
-<template id="sale_portal_remove_connect"
-          inherit_id="sale.portal_content_boot"
-          name="Remove Odoo connect for sale portal">
-    <xpath expr="//a[hasclass('o_portal_connect_button')]/.."
-           position="replace"/>
-</template>
-```
-
-Mismo patrón para `purchase.portal_content_boot` desde
-`erpico_debranding_sale` reutilizando el objeto Apache (QWeb hereda por
-`inherit_id` de `purchase.portal_content_boot`).
-
-### Reglas duras
-
-1. El XPath usa `replace` completo del nodo botón (más robusto que `t-if`).
-2. Si `erpico_debranding_sale` se instala sin `sale` o `purchase`, el
-   install falla → la dependencia es declarada en el manifest.
-3. No mover botones; solo eliminar la referencia de marca.
-
-## Documentos que cierra
-
-- `BDD` → BN-10.
-- `TESTS_COVERAGE.md` → QA manual.
-
-## Pendientes post-release
-
-- [ ] Test automatizado con `HttpCase` del portal (requiere cotización
-  publicada).
-- [ ] Revisar `digest` (envío de resumen de ventas) que también renderiza
-  botón de marca.
+Repetir pruebas con integraciones EDI reales, idiomas y configuraciones del
+entorno de destino. No se realizaron integraciones o pagos reales.

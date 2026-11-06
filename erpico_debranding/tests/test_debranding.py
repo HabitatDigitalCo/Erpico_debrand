@@ -1,14 +1,18 @@
 # © 2026 Habitat Digital
 # License LGPL-3.0 or later (https://www.gnu.org/licenses/lgpl.html).
 
-import importlib.util
-from pathlib import Path
+import base64
 
+from lxml import etree
+
+from odoo import tools
+from odoo.addons.erpico_debranding import _rebrand_bot_partner
 from odoo.addons.erpico_debranding.patches import legacy_emails
 from odoo.addons.erpico_debranding.patches.legacy_emails import (
     LEGACY_EMAIL_XMLIDS,
 )
 from odoo.tests import HttpCase, TransactionCase, tagged
+from odoo.tools.safe_eval import safe_eval
 
 
 @tagged('erpico_debranding')
@@ -25,45 +29,68 @@ class TestLegacyEmails(TransactionCase):
         self.assertIn('ERPICO', set_password_body)
 
     def test_bot_partner_renamed(self):
-        bots = self.env['res.partner'].search([
-            ('name', '=', 'OdooBot'),
-            ('active', 'in', (True, False)),
-        ])
-        self.assertFalse(bots)
+        self.assertEqual(self.env.ref('base.partner_root').name, 'ERPICO Assistant')
+
+    def test_invitation_subject_rebranded(self):
+        template = self.env.ref('auth_signup.set_password_email').with_context(lang='en_US')
+        subject = template.subject
+        self.assertIn('ERPICO', subject)
+        self.assertNotIn('Odoo', subject)
+        rendered = template._render_field('subject', [self.env.user.id])[self.env.user.id]
+        self.assertIn('ERPICO', rendered)
+        self.assertNotIn('Odoo', rendered)
+        body = template._render_field('body_html', [self.env.user.id])[self.env.user.id]
+        self.assertIn('ERPICO', str(body))
+        self.assertIn('href=', str(body))
+        self.assertNotIn('odoo.com', str(body))
+
+    def test_custom_template_and_other_contact_are_preserved(self):
+        template = self.env.ref('auth_signup.set_password_email').with_context(lang='en_US')
+        template.write({
+            'subject': 'Custom Odoo invitation',
+            'body_html': '<p>Welcome to Odoo - custom content</p>',
+        })
+        contact = self.env['res.partner'].create({'name': 'OdooBot'})
+        legacy_emails.patch_legacy_emails(self.env)
+        self.assertEqual(template.subject, 'Custom Odoo invitation')
+        self.assertIn('Welcome to Odoo - custom content', str(template.body_html))
+        self.assertEqual(contact.name, 'OdooBot')
+
+    def test_custom_bot_identity_is_preserved(self):
+        bot = self.env.ref('base.partner_root')
+        with tools.file_open('base/static/img/res_company_logo.png', 'rb') as image:
+            bot.write({'name': 'Custom Assistant', 'image_1920': base64.b64encode(image.read())})
+        before = bot.image_1920
+        _rebrand_bot_partner(self.env)
+        self.assertEqual(bot.name, 'Custom Assistant')
+        self.assertEqual(bot.image_1920, before)
+
+    def test_custom_bot_image_is_preserved_with_stock_name(self):
+        bot = self.env.ref('base.partner_root')
+        with tools.file_open('base/static/img/res_company_logo.png', 'rb') as image:
+            bot.write({'name': 'OdooBot', 'image_1920': base64.b64encode(image.read())})
+        before = bot.image_1920
+        _rebrand_bot_partner(self.env)
+        self.assertEqual(bot.name, 'ERPICO Assistant')
+        self.assertEqual(bot.image_1920, before)
 
 
 @tagged('erpico_debranding')
 class TestEnterpriseHidden(TransactionCase):
 
-    def test_module_to_buy_hidden_from_search_fetch(self):
+    def test_module_hidden_only_in_catalog_action(self):
         module = self.env['ir.module.module'].create({
             'name': 'test_enterprise_hidden',
             'state': 'uninstalled',
             'to_buy': True,
         })
-        res = self.env['ir.module.module'].search_fetch(
-            [('name', '=', 'test_enterprise_hidden')]
-        )
-        self.assertNotIn(module, res)
-        res_all = self.env['ir.module.module'].with_context(
-            debranding_show_enterprise=True
-        ).search_fetch([('name', '=', 'test_enterprise_hidden')])
-        self.assertIn(module, res_all)
-        self.assertEqual(
-            self.env['ir.module.module'].search_count(
-                [('name', '=', 'test_enterprise_hidden')]
-            ), 0)
-        # el filtro también aplica a search() plano (wizards/API)
-        res_plain = self.env['ir.module.module'].search(
-            [('name', '=', 'test_enterprise_hidden')]
-        )
-        self.assertNotIn(module, res_plain)
-        res_plain_all = self.env['ir.module.module'].with_context(
-            debranding_show_enterprise=True
-        ).search([('name', '=', 'test_enterprise_hidden')])
-        self.assertIn(module, res_plain_all)
+        modules = self.env['ir.module.module']
+        self.assertIn(module, modules.search([('id', '=', module.id)]))
+        self.assertEqual(modules.search_count([('id', '=', module.id)]), 1)
+        action = self.env.ref('base.open_module_tree')._get_action_dict()
+        self.assertNotIn(module, modules.search(safe_eval(action['domain'])))
 
-    def test_payment_provider_module_to_buy_hidden(self):
+    def test_provider_hidden_only_in_catalog_action(self):
         module = self.env['ir.module.module'].create({
             'name': 'test_enterprise_module',
             'state': 'uninstalled',
@@ -73,46 +100,25 @@ class TestEnterpriseHidden(TransactionCase):
             'name': 'Test Enterprise Provider',
             'code': 'none',
             'module_id': module.id,
+            'state': 'enabled',
+            'is_published': True,
         })
-        res = self.env['payment.provider'].search_fetch(
-            [('code', '=', 'none'), ('name', '=', 'Test Enterprise Provider')]
-        )
-        self.assertNotIn(provider, res)
-        res_all = self.env['payment.provider'].with_context(
-            debranding_show_enterprise=True
-        ).search_fetch(
-            [('code', '=', 'none'), ('name', '=', 'Test Enterprise Provider')]
-        )
-        self.assertIn(provider, res_all)
-        # filtro también en search() plano
-        res_plain = self.env['payment.provider'].search(
-            [('code', '=', 'none'), ('name', '=', 'Test Enterprise Provider')]
-        )
-        self.assertNotIn(provider, res_plain)
-        res_plain_all = self.env['payment.provider'].with_context(
-            debranding_show_enterprise=True
-        ).search(
-            [('code', '=', 'none'), ('name', '=', 'Test Enterprise Provider')]
-        )
-        self.assertIn(provider, res_plain_all)
+        providers = self.env['payment.provider']
+        self.assertIn(provider, providers.search([('id', '=', provider.id)]))
+        self.assertEqual(providers.search_count([('id', '=', provider.id)]), 1)
+        action = self.env.ref('payment.action_payment_provider')._get_action_dict()
+        self.assertNotIn(provider, providers.search(safe_eval(action['domain'])))
+        compatible = providers._get_compatible_providers(
+            self.env.company.id, self.env.ref('base.partner_admin').id, 10.0)
+        self.assertIn(provider, compatible)
 
-    def test_search_handles_legacy_domains(self):
-        # los domains None y tuple no deben romper el filtro ni el ORM
-        self.env['ir.module.module'].search(None)
-        self.env['ir.module.module'].search(())
-        self.env['payment.provider'].search(None)
-        self.env['payment.provider'].search(())
-        # y el filtro sigue activo con domain None
-        hidden = self.env['ir.module.module'].create({
-            'name': 'test_legacy_domain_hidden',
-            'state': 'uninstalled',
-            'to_buy': True,
-        })
-        self.assertNotIn(
-            hidden,
-            self.env['ir.module.module'].search(
-                [('name', '=', 'test_legacy_domain_hidden')]),
-        )
+    def test_action_keeps_existing_domain_and_does_not_change_record(self):
+        action = self.env.ref('base.open_module_tree')
+        action.domain = "[('state', '=', 'installed')]"
+        result = action._get_action_dict()
+        self.assertEqual(action.domain, "[('state', '=', 'installed')]")
+        self.assertIn(('state', '=', 'installed'), safe_eval(result['domain']))
+        self.assertIn(('to_buy', '=', False), safe_eval(result['domain']))
 
 
 @tagged('erpico_debranding')
@@ -125,6 +131,10 @@ class TestSettingsView(TransactionCase):
         result = self.env['res.config.settings'].get_views([(view.id, 'form')])
         arch = result['views']['form']['arch']
         self.assertNotIn('upgrade_boolean', arch)
+        tree = etree.fromstring(arch)
+        setting = tree.xpath("//setting[@id='inter_company']")
+        if setting:
+            self.assertEqual(setting[0].get('invisible'), 'True')
         self.assertGreater(len(arch), 1000)
 
 
@@ -196,36 +206,7 @@ class TestDebrandingHttp(HttpCase):
 
 @tagged('erpico_debranding')
 class TestPatchMigrationParity(TransactionCase):
-    """Verifica que la migración autocontenida y el parche compartan la misma configuración."""
-
-    def _load_migration(self):
-        migration_path = (
-            Path(__file__).resolve().parents[1]
-            / 'migrations' / '19.0.1.1.0' / 'post-migrate.py'
-        )
-        spec = importlib.util.spec_from_file_location(
-            'post_migrate_parity', str(migration_path))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
-    def test_replacements_parity(self):
-        migration = self._load_migration()
-        self.assertEqual(
-            legacy_emails._REPLACEMENTS, migration._REPLACEMENTS,
-            "_REPLACEMENTS mismatch between patch and migration")
-        self.assertEqual(
-            legacy_emails.LEGACY_EMAIL_XMLIDS, migration.LEGACY_EMAIL_XMLIDS,
-            "LEGACY_EMAIL_XMLIDS mismatch between patch and migration")
-        self.assertEqual(
-            legacy_emails._POWERED_RE.pattern, migration._POWERED_RE.pattern,
-            "_POWERED_RE pattern mismatch")
-        self.assertEqual(
-            legacy_emails._TOUR_RE.pattern, migration._TOUR_RE.pattern,
-            "_TOUR_RE pattern mismatch")
-        self.assertEqual(
-            legacy_emails._MARKETING_RE.pattern, migration._MARKETING_RE.pattern,
-            "_MARKETING_RE pattern mismatch")
+    """El parche se comparte con migraciones y es idempotente."""
 
     def test_patch_idempotent(self):
         """Segunda ejecución del parche no modifica nada."""
@@ -255,6 +236,10 @@ class TestBotWelcomeNeutral(TransactionCase):
         bot = self.env.ref('base.partner_root')
         self.assertEqual(bot.name, 'ERPICO Assistant')
         self.assertTrue(bot.image_1920)
+        with tools.file_open('erpico_debranding/static/src/img/bot_placeholder.png', 'rb') as image:
+            expected = bot._fields['image_1920']._image_process(
+                base64.b64encode(image.read()), self.env)
+        self.assertEqual(bot.image_1920, expected)
 
     def test_get_answer_neutralizes(self):
         bot = self.env['mail.bot']

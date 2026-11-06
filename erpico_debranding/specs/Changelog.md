@@ -3,15 +3,46 @@
 Bitácora versionada por sesiones. Semana (año-semana), decisiones y cambios
 relevantes. Documento vivo.
 
+> Las entradas de septiembre describen decisiones y pruebas históricas, no el
+> comportamiento vigente. Referencia actual: arquitectura y cobertura 1.4.0.
+
+---
+
+## Extensiones POS y ventas/compras — 19.0.1.1.0
+
+- POS añade debranding a pantalla de cliente y conserva el recibo ERPICO.
+  Seis pruebas Hoot verificaron render con datos sintéticos; impresión física
+  y funcionamiento offline siguen pendientes.
+- Ventas/compras oculta en los reportes de compra los enlaces al modal EDI
+  oculto. Los endpoints EDI mantienen sus controles nativos y no se desactivan.
+- Pruebas con EDI simulado incluyeron controles positivos y verificación de
+  reportes. Pruebas HTTP se ejecutan después de instalar todos los addons.
+- Instalación conjunta aislada: 31 pruebas Python sin errores. Actualización
+  sintética de las extensiones desde 19.0.1.0.1: 11 pruebas sin errores.
+
+---
+
+## 2026-11-06 UTC — Versión 19.0.1.4.0
+
+- Eliminados filtros ORM globales: acciones de listado filtran Enterprise sin
+  modificar búsquedas o selección interna de proveedores. Ajustes con
+  `upgrade_boolean` quedan ocultos.
+- Bot localizado por `base.partner_root`; preservados contacto homónimo,
+  nombre e imagen personalizados. Parche de plantillas restringido al contenido
+  inglés original; asunto de invitación estándar corregido.
+- Documentados límites de rutas sin base, dependencia de infraestructura y
+  rollback de datos persistentes.
+- Instalación limpia aislada en Odoo `19.0-20260817`: **20 pruebas, 0 fallos,
+  0 errores**. Upgrade sintético desde `19.0.1.3.0` conservó personalizaciones.
+  Sin prueba de pago real, checkout en navegador ni validación de español.
+
 ---
 
 ## 2026-09-17 — Sesión 1: implementación de la suite
 
-**Entorno:** Odoo 19.0 FINAL build, Docker Compose (`odoo_debrand_test` app
-+ `db` postgres), base `debrand_test`.
+**Entorno de prueba:** Odoo 19 Community.
 
-- Montaje del scaffold de los 3 módulos y sus assets estáticos (isotipo,
-  SCSS) bajo `Custom_addons/`.
+- Montaje inicial de los 3 módulos y sus assets estáticos (isotipo y SCSS).
 - Implementadas las 13 superficies del plan (S1–S13):
   - QWeb `web.login_layout` / `web.layout` (título, favicon, footer).
   - Filtros `search_fetch`/`search_count` en `base` para `to_buy`
@@ -51,11 +82,7 @@ relevantes. Documento vivo.
 
 ## 2026-09-17 — Sesión 3: publicación Git + OCA + documentación
 
-- Creado el repo GitHub `Vankisito/DebrandingERPICO`; inicializado con
-  raíz en `Custom_addons/` (corrección: el repo debe vivir dentro del
-  árbol de módulos, no en la raíz del workspace).
-- `git init`, `.gitignore`, commit inicial (26 archivos, 413
-  inserciones), `push -u origin main` → HEAD `5178073`.
+- Publicación inicial del código y documentación en repositorio Git.
 - Pasados los 3 módulos a convenciones OCA: headers, manifests,
   `readme/` fragments, suite de tests `tests/test_debranding.py`.
 - Documentada la suite completa en `Specs/`.
@@ -81,7 +108,7 @@ relevantes. Documento vivo.
 
 ## 2026-09-18 — Sesión 5: audit + cierre R-001 + suite ampliada
 
-**Entorno:** mismo stack Docker (`odoo_debrand_test` + `db_debrand_test`).
+**Entorno:** Odoo 19 de prueba.
 
 - Audit del estado: 11/11 tests verdes, tree limpio, 6 hallazgos
   documentados (R-001 abierto, S12/S13 sin tests, drift parche/migración,
@@ -89,7 +116,7 @@ relevantes. Documento vivo.
 - **R-001 resuelto:** controller override de `web.Database` en
   `controllers/main.py` — los 6 POST (`create`, `duplicate`, `drop`,
   `backup`, `restore`, `change_password`) → 403. Verificado por HttpCase
-  (6 endpoints) y por HTTP real contra el server en vivo (8070).
+  (6 endpoints) y por HTTP contra un servidor de prueba.
 - **Blindaje de domains:** helper `_prepare_domain` en `models/base.py`
   (None/tuple → list; str legacy se pasa intacto).
 - **Drift parche/migración:** `TestPatchMigrationParity` compara
@@ -117,7 +144,7 @@ relevantes. Documento vivo.
 
 ## 2026-09-22 — Sesión 6: bot neutro + banner PWA + avatar
 
-**Entorno:** mismo stack Docker; validación pendiente (`-u` + suite).
+**Entorno:** Odoo 19 de prueba; validación pendiente en esa sesión (`-u` + suite).
 
 - **BUG-008 (banner "Install Odoo"):** causa en
   `mail/static/src/core/web/messaging_menu_patch.js:73-84` (getter
@@ -143,7 +170,7 @@ relevantes. Documento vivo.
 
 ## 2026-09-22 — Sesión 7: validación Docker + hot-fix runtime JS
 
-**Entorno:** mismo stack Docker; `-u erpico_debranding --dev=all` + suite + Edge headless (CDP) contra el server en vivo (8070).
+**Entorno:** Odoo 19 de prueba; `-u erpico_debranding --dev=all` + suite + Edge headless (CDP).
 
 - **Validación backend:** `-u` con suite → **0 failed, 0 errors (17 tests)**; bundle backend (6.2MB) contiene `canPromptToInstall`, `install_pwa`, `erpico_res_config_edition`, `bot_placeholder.png`; partner root "ERPICO Assistant" con `image_1920` (len 3720); bienvenida neutra sin "Odoo"/odoo.com.
 - **BUG-011 (crítico, runtime):** al entrar a la webclient, `Uncaught Error: Cannot add key "res_config_edition" in the "view_widgets" registry: it already exists`. El core `web` ya registra esa clave en `view_widgets`; `Registry.add()` sin `{ force: true }` lanza `DuplicatedKeyError` → aborta el module loader de `web.assets_backend`. No detectado por tests backend (no ejercitan la webclient). Fix: `{ force: true }` en `res_config_edition.js` (heredó `sequence` 60 del core, confirmado en Node replicando el core).

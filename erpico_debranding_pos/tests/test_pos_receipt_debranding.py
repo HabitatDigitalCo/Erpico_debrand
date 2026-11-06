@@ -32,3 +32,19 @@ class TestPosReceiptDebranding(TransactionCase):
         self.assertIn('t-inherit="point_of_sale.OrderReceipt"', xml)
         self.assertIn('Powered by <b>ERPICO</b>', xml)
         self.assertNotIn('Powered by Odoo', xml)
+
+    def test_customer_display_override_registered_in_separate_bundle(self):
+        paths = self.env['ir.asset']._get_asset_paths(
+            'point_of_sale.customer_display_assets', {})
+        self.assertTrue(any(
+            item[0].endswith('erpico_debranding_pos/static/src/override/customer_display.xml')
+            for item in paths
+        ))
+
+    def test_receipt_override_registered_in_dark_bundle(self):
+        paths = self.env['ir.asset']._get_asset_paths(
+            'point_of_sale.assets_prod_dark', {})
+        self.assertTrue(any(
+            item[0].endswith('erpico_debranding_pos/static/src/override/order_receipt.xml')
+            for item in paths
+        ))

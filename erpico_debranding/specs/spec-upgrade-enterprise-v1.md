@@ -1,5 +1,9 @@
 # Spec v1 — Ocultar módulos Enterprise y widgets de upgrade
 
+> **Histórico:** especificación del filtro ORM anterior a `19.0.1.4.0`.
+> Sus overrides y `debranding_show_enterprise` ya no son la implementación
+> vigente. Ver `Arquitectura_ERPICO_Debranding.md` y decisión D-15.
+
 **Fecha:** 2026-09-17
 **Estado:** Implementada y verificada
 **Superficie:** S3, S4, S5

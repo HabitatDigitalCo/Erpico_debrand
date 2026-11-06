@@ -1,5 +1,9 @@
 # Spec v1 — Bot de chat neutro, banner Install y tarjeta About
 
+> **Histórico:** describe la versión 1.3.0. En 1.4.0 el tratamiento del bot
+> preserva identidad personalizada; los tests del núcleo pasaron en instalación
+> aislada. Ver arquitectura y `TESTS_COVERAGE.md` para el estado actual.
+
 **Fecha:** 2026-09-22
 **Versión del módulo:** `erpico_debranding` 19.0.1.3.0
 **Estado:** Implementado — validación con Docker pendiente
@@ -197,7 +201,7 @@ Nueva clase `TestBotWelcomeNeutral`:
 
 ## 5. Criterios de aceptación (validación pendiente)
 
-Con `-u erpico_debranding --dev=all -d debrand_test` y hard-refresh
+Con `-u erpico_debranding --dev=all -d <base_qa>` y hard-refresh
 (Ctrl+Shift+R):
 
 1. **S14:** crear/abrir chat con "ERPICO Assistant": bienvenida sin "Odoo";

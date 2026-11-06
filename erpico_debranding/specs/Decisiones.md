@@ -40,9 +40,9 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
   `base.menu_third_party` se mueven bajo `base.menu_ir_property` (fuera de
   cualquier raíz visible de apps). No se eliminan registros.
 - **Por qué:** eliminar registros del seed rompe dependencias y complica
-  upgrades; reparent es reversible y seguro.
+  upgrades; el reparent conserva los registros, pero requiere rollback explícito.
 - **Impacto:** visibles a administradores que expandan la jerarquía raw;
-  asumido.
+  asumido. La desinstalación no restaura automáticamente el padre previo.
 
 ---
 
@@ -50,20 +50,10 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
 
 - **Estado:** `[x]`
 - **Qué:** los 4 `mail.template` de `auth_signup` con `body_html` almacenado
-  con marca Odoo se reescriben con reemplazos quirúrgicos en
-  `patches/legacy_emails.py`:
-  ```python
-  _REPLACEMENTS = [
-      ('odoo.com', 'erpico.com'),
-      ('Odoo Standard', 'ERPICO'),
-      ('Odoo includes ... automated processes', _ABOUT_TEXT),
-      ('Odoo Tour', 'ERPICO Tour'),
-      ('Powered by <a href="https://www.odoo.com" ...>', 'Powered by'),
-  ]
-  ```
-  La lógica vive en `patches/` (reutilizable) y se dispara desde
-  `post_init_hook` del manifest + migración `19.0.1.1.0/post-migrate.py`
-  (upgrade de bases ya instaladas).
+  con marca Odoo se procesan en `patches/legacy_emails.py`. Desde `19.0.1.4.0`,
+  el parche compara cada campo en inglés con su original upstream antes de
+  escribir y preserva contenido personalizado. También corrige el asunto inglés
+  original de invitación. El hook y las migraciones reutilizan el helper.
 - **Por qué:** son campos almacenados; el QWeb solo debranda lo dinámico.
 - **Alternativas rechazadas:** regenerar los templates desde XML con
   `force_create` / retrocompat bad; cambiar el correo por completo rompe
@@ -77,8 +67,8 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
 ## D-05 — Renombrar partner `OdooBot` → `ERPICO Assistant`
 
 - **Estado:** `[x]`
-- **Qué:** en el mismo parche se localiza el partner del bot interno de Odoo
-  y se renombra.
+- **Qué:** el hook y la migración localizan `base.partner_root` y renombran
+  solo su nombre estándar. Se preservan nombre e imagen personalizados.
 - **Por qué:** aparece como autor/remitente en chatter, emails y archivos.
 - **Detalle:** el partner del bot está marcado `active=False`; las búsquedas
   por defecto no lo ven (`ERPICO Assistant` no aparece en search normal hasta
@@ -86,19 +76,16 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
 
 ---
 
-## D-06 — Rutas de BD: 403 en UI, POST no intervenido
+## D-06 — Rutas de BD: bloqueo complementario
 
-- **Estado:** `[x]` — *enmendada 2026-09-18:* los POST también se bloquean
-  (R-001 resuelto en `19.0.1.2.0`); el JSON-RPC `/web/database/list` sigue
-  activo por compatibilidad móvil (ver `Bugs.md`).
-- **Qué:** `/web/database/manager` y `/web/database/selector` → `Forbidden`
-  (403). Los endpoints **POST** `/web/database/{create,drop,backup,restore}`
-  quedan intactos (hasta 2026-09-17).
-- **Por qué:** con DB public domain público y auth de admin de BD externo,
-  bloquear la UI quita la exposición superficial; intervenir los POST añade
-  superficie de test y riesgo de efecto colateral en tools de
-  backup/restore.
-- **Riesgo:** ver `Bugs.md` **R-001**.
+- **Estado:** `[x]` como bloqueo complementario; protección global pendiente
+  de configuración. Desde `19.0.1.2.0` también se bloquean los POST cuando se
+  carga el controlador del addon; `/web/database/list` sigue sin sobrescribirse.
+- **Qué:** con base seleccionada, el controlador también rechaza los seis POST
+  de gestión enumerados en `controllers/main.py`. Sin base seleccionada, el
+  controlador puede no cargarse; `/web/database/list` no se sobrescribe.
+- **Riesgo:** no constituye control global: requieren validación `list_db`,
+  `dbfilter`, proxy y aislamiento de infraestructura.
 
 ---
 
@@ -112,8 +99,8 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
   Odoo; debranding exige quitarlos de la UI.
 - **Alternativas rechazadas:** editar views del seed (prohibido), JS de
   stripping en cliente (frágil y visible en flash de UI).
-- **Impacto:** ninguna propiedad del arch se pierde; solo se elimina el
-  atributo del widget.
+- **Impacto:** desde `19.0.1.4.0`, además se oculta el `setting` que contiene
+  el campo, o el campo si no tiene `setting`; el campo no se elimina.
 
 ---
 
@@ -121,10 +108,11 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
 
 - **Estado:** `[x]`
 - **Qué:** `erpico_debranding/tests/` con clases `@tagged('erpico_debranding')`
-  (TransactionCase + HttpCase) que cubren todas las superficies S1–S11.
+  (TransactionCase + HttpCase) que cubren parte de las superficies del núcleo.
 - **Por qué:** validación reproducible fuera de sesiones HTTP manuales;
   requisito de calidad OCA.
-- **Impacto:** la suite es el oráculo de regresión tras cualquier cambio.
+- **Impacto:** la suite ayuda a detectar regresiones; no sustituye pruebas de
+  navegador, infraestructura, traducciones o integraciones reales.
 
 ---
 
@@ -214,3 +202,31 @@ Estado de cada registro: `[x]` aceptada, `[ ]` propuesta, `[!]` revocada.
   template con nombre único) es determinista.
 - **Impacto:** la tarjeta About muestra "ERPICO / Powered by ERPICO", sin
   versión Community ni copyright Odoo.
+
+---
+
+## D-15 — Enterprise oculto solo en presentación
+
+- **Estado:** `[x]` desde `19.0.1.4.0`.
+- **Qué:** se añaden dominios a acciones de listado de módulos y proveedores;
+  ajustes con `upgrade_boolean` se ocultan. Se retiraron filtros globales ORM.
+- **Por qué:** evitar alterar selección de proveedores y operaciones internas.
+- **Límite:** no es seguridad, no cubre necesariamente todos los accesos ni
+  garantiza que cada contador de interfaz excluya Enterprise.
+
+## D-16 — Preservar datos personalizados
+
+- **Estado:** `[x]` desde `19.0.1.4.0`.
+- **Qué:** se identifica el bot por XML ID y solo se modifica su identidad
+  estándar; los campos de correo en inglés se cambian solo si coinciden con
+  sus valores originales. Un contacto homónimo no cambia.
+- **Límite:** contenido personalizado y otros idiomas pueden mostrar marca Odoo;
+  cambios persistidos previamente requieren recuperación desde respaldo.
+
+## D-17 — Seguridad de base en infraestructura
+
+- **Estado:** `[x]` como límite de arquitectura; configuración externa pendiente.
+- **Qué:** el controlador es complemento de `list_db=False`, `dbfilter`, proxy
+  y aislamiento. No se considera cobertura global para peticiones sin base.
+- **Verificación:** probar rutas con y sin base seleccionada en cada entorno;
+  no asumir que un 403 en una sesión protegida aplica a peticiones sin base.
